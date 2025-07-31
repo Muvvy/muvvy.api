@@ -1,26 +1,38 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { initDB } from './db.js';
-import authRouter from './routes/auth.js';
-import messagesRouter from './routes/messages.js';
-import { authMiddleware } from './middleware/auth.js';
+import db from './db.js';
 
 dotenv.config();
 
 const app = express();
-app.use(cors({ origin: 'https://muvvy.github.io' }));
+app.use(cors());
 app.use(express.json());
 
-const start = async () => {
-  const db = await initDB();
+app.get('/messages', (req, res) => {
+  db.all('SELECT * FROM messages ORDER BY timestamp DESC LIMIT 50', [], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
 
-  app.use('/api', authRouter(db));
-  app.use('/api/messages', authMiddleware, messagesRouter(db));
-  app.use('/api/me', authMiddleware, (req, res) => res.json({ user: req.user }));
+app.post('/messages', (req, res) => {
+  const { username, content } = req.body;
+  if (!username || !content) {
+    return res.status(400).json({ error: 'Username and content are required.' });
+  }
 
-  const port = process.env.PORT || 3000;
-  app.listen(port, () => console.log(`✅ API running on port ${port}`));
-};
+  db.run(
+    'INSERT INTO messages (username, content) VALUES (?, ?)',
+    [username, content],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.status(201).json({ id: this.lastID });
+    }
+  );
+});
 
-start();
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
+});
